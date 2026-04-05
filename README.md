@@ -88,6 +88,60 @@ bun run dev
 
 Frontend runs on `http://localhost:3000`.
 
+## Docker Setup (Frontend + Backend + PostgreSQL pgvector)
+
+The repository now includes:
+- `docker-compose.yml`
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+- `docker/postgres/init/01-enable-pgvector.sql`
+
+This stack starts:
+- frontend on `http://localhost:3000`
+- backend on `http://localhost:8000`
+- postgres (with pgvector extension enabled) on `localhost:5432`
+
+Note: frontend container runs with `bun run dev` in Docker for compatibility with current Bun + Next container behavior.
+
+### Start with Docker
+
+```bash
+docker compose up --build -d
+```
+
+### Check service status
+
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+### Stop and clean
+
+```bash
+docker compose down
+```
+
+To remove database volume too:
+
+```bash
+docker compose down -v
+```
+
+### Verify frontend/backend communication
+
+```bash
+cd frontend
+bun run test:backend-connection
+bun run test:ai-bridge
+```
+
+Expected behavior:
+- `test:backend-connection` passes when backend and database are both reachable.
+- `test:ai-bridge` returns either:
+  - `200` when `NVIDIA_API_KEY` is configured
+  - `503` when NVIDIA key is not configured yet (backend bridge still reachable)
+
 ## Test and Quality Commands
 
 ### Backend
