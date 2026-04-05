@@ -90,3 +90,88 @@ async def test_embeddings_returns_503_when_api_key_missing(monkeypatch) -> None:
 
     assert response.status_code == 503
     assert "NVIDIA_API_KEY" in response.json()["detail"]
+
+
+async def test_semantic_documents_endpoint_contract(monkeypatch) -> None:
+    async def fake_upsert_semantic_chunk(_payload):
+        return {
+            "id": "chunk-intro",
+            "model": "manual-vector",
+            "dimensions": 3,
+        }
+
+    monkeypatch.setattr("app.ai_routes.upsert_semantic_chunk", fake_upsert_semantic_chunk)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/ai/semantic-documents",
+            json={
+                "id": "chunk-intro",
+                "content": "Fehem helps students study with AI.",
+                "embedding": [0.11, 0.22, 0.33],
+                "metadata": {"course": "intro"},
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["id"] == "chunk-intro"
+    assert body["model"] == "manual-vector"
+    assert body["dimensions"] == 3
+
+
+async def test_semantic_search_endpoint_contract(monkeypatch) -> None:
+    async def fake_search_semantic_chunks(_payload):
+        return {
+            "model": "manual-vector",
+            "count": 1,
+            "matches": [
+                {
+                    "id": "chunk-intro",
+                    "content": "Fehem helps students study with AI.",
+                    "metadata": {"course": "intro"},
+                    "score": 0.998,
+                }
+            ],
+        }
+
+    monkeypatch.setattr("app.ai_routes.search_semantic_chunks", fake_search_semantic_chunks)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/ai/semantic-search",
+            json={
+                "query_embedding": [0.11, 0.22, 0.33],
+                "top_k": 3,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["model"] == "manual-vector"
+    assert body["count"] == 1
+    assert body["matches"][0]["id"] == "chunk-intro"
+
+
+async def test_semantic_search_returns_400_on_dimension_mismatch(monkeypatch) -> None:
+    async def fake_search_semantic_chunks(_payload):
+        raise ValueError("Embedding dimensions mismatch.")
+
+    monkeypatch.setattr("app.ai_routes.search_semantic_chunks", fake_search_semantic_chunks)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/ai/semantic-search",
+            json={
+                "query_embedding": [0.11, 0.22, 0.33],
+                "top_k": 3,
+            },
+        )
+
+    assert response.status_code == 400
+    assert "dimensions" in response.json()["detail"].lower()

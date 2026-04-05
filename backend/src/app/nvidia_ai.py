@@ -17,7 +17,9 @@ class NvidiaProviderError(RuntimeError):
 
 def _resolve_api_key() -> str:
     if not settings.nvidia_api_key:
-        raise NvidiaConfigError("NVIDIA_API_KEY is missing. Set it in backend/.env.")
+        raise NvidiaConfigError(
+            "NVIDIA_API_KEY is missing. Set it in backend/.env for local runs or .env.docker for Docker runs."
+        )
 
     return settings.nvidia_api_key
 

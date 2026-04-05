@@ -13,21 +13,29 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U fehem -d fehem"]
       interval: 5s
       timeout: 5s
       retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
+    profiles: ["dev"]
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: fehem-backend
+    env_file:
+      - ./.env.docker
     environment:
-      DATABASE_URL: postgresql://fehem:fehem@postgres:5432/fehem
-      FRONTEND_ORIGIN: http://localhost:3000
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://fehem:fehem@postgres:5432/fehem}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       NVIDIA_OPENAI_BASE_URL: https://integrate.api.nvidia.com/v1
       NVIDIA_EMBEDDING_MODEL: nvidia/llama-nemotron-embed-vl-1b-v2
       NVIDIA_CHAT_MODEL: stepfun-ai/step-3.5-flash
@@ -37,24 +45,130 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    restart: unless-stopped
+    init: true
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 10s
       timeout: 5s
       retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
+    profiles: ["dev"]
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: fehem-frontend
     environment:
-      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
     depends_on:
       backend:
         condition: service_healthy
     ports:
       - "3000:3000"
+    restart: unless-stopped
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend-prod:
+    profiles: ["production"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fehem-backend-prod
+    command:
+      [
+        "python",
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--app-dir",
+        "src",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "2",
+        "--proxy-headers",
+        "--forwarded-allow-ips=*",
+      ]
+    env_file:
+      - ./.env.docker
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://fehem:fehem@postgres:5432/fehem}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+      NVIDIA_OPENAI_BASE_URL: https://integrate.api.nvidia.com/v1
+      NVIDIA_EMBEDDING_MODEL: nvidia/llama-nemotron-embed-vl-1b-v2
+      NVIDIA_CHAT_MODEL: stepfun-ai/step-3.5-flash
+      NVIDIA_IMAGE_ENDPOINT: https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.2-klein-4b
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1.00
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  frontend-prod:
+    profiles: ["production"]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: fehem-frontend-prod
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:8000}
+    depends_on:
+      backend-prod:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1.00
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
 
 volumes:
   postgres_data:

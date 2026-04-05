@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class EmbeddingRequest(BaseModel):
@@ -45,3 +45,44 @@ class ImageResponse(BaseModel):
     status: Literal["ok"] = "ok"
     model: str
     result: dict[str, Any]
+
+
+class SemanticDocumentUpsertRequest(BaseModel):
+    id: str = Field(min_length=1)
+    content: str = Field(min_length=1)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    embedding: list[float] | None = None
+
+
+class SemanticDocumentUpsertResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    id: str
+    model: str
+    dimensions: int
+
+
+class SemanticSearchRequest(BaseModel):
+    query: str | None = None
+    query_embedding: list[float] | None = None
+    top_k: int = Field(default=5, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def validate_query_source(self) -> "SemanticSearchRequest":
+        if self.query_embedding is None and not self.query:
+            raise ValueError("Either query or query_embedding is required.")
+
+        return self
+
+
+class SemanticSearchMatch(BaseModel):
+    id: str
+    content: str
+    metadata: dict[str, Any]
+    score: float
+
+
+class SemanticSearchResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    model: str
+    count: int
+    matches: list[SemanticSearchMatch]

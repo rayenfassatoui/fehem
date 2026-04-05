@@ -11,7 +11,8 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "test:backend-connection": "bun scripts/test-backend-connection.ts",
-    "test:ai-bridge": "bun scripts/test-ai-bridge.ts"
+    "test:ai-bridge": "bun scripts/test-ai-bridge.ts",
+    "test:semantic-search": "bun scripts/test-semantic-search.ts"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.1.1",

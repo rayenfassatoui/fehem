@@ -92,21 +92,32 @@ Frontend runs on `http://localhost:3000`.
 
 The repository now includes:
 - `docker-compose.yml`
+- `.env.docker.example`
 - `backend/Dockerfile`
 - `frontend/Dockerfile`
+- `frontend/Dockerfile.prod`
 - `docker/postgres/init/01-enable-pgvector.sql`
 
-This stack starts:
-- frontend on `http://localhost:3000`
-- backend on `http://localhost:8000`
-- postgres (with pgvector extension enabled) on `localhost:5432`
+Docker stack profiles:
+- `dev`: local development containers
+- `production`: hardened runtime profile for deployment-like runs
 
-Note: frontend container runs with `bun run dev` in Docker for compatibility with current Bun + Next container behavior.
+Dedicated Docker env file:
+- `.env.docker` is loaded by backend/frontend services (optional but recommended).
+- Use `.env.docker.example` as reference.
+- Keep real secrets only in `.env.docker` (already ignored by git).
+- `DATABASE_URL` can be set in `.env.docker`; if omitted, Docker falls back to `postgresql://fehem:fehem@postgres:5432/fehem`.
 
-### Start with Docker
+### Start Dev Profile
 
 ```bash
-docker compose up --build -d
+docker compose --profile dev up --build -d
+```
+
+### Start Production Profile
+
+```bash
+docker compose --profile production up --build -d
 ```
 
 ### Check service status
@@ -128,12 +139,19 @@ To remove database volume too:
 docker compose down -v
 ```
 
+### Service URLs
+
+- frontend: `http://localhost:3000`
+- backend: `http://localhost:8000`
+- postgres (pgvector enabled): `localhost:5432`
+
 ### Verify frontend/backend communication
 
 ```bash
 cd frontend
 bun run test:backend-connection
 bun run test:ai-bridge
+bun run test:semantic-search
 ```
 
 Expected behavior:
@@ -141,6 +159,7 @@ Expected behavior:
 - `test:ai-bridge` returns either:
   - `200` when `NVIDIA_API_KEY` is configured
   - `503` when NVIDIA key is not configured yet (backend bridge still reachable)
+- `test:semantic-search` validates pgvector upsert + nearest-neighbor search through backend API.
 
 ## Test and Quality Commands
 
@@ -167,6 +186,7 @@ bun run build
 cd frontend
 bun run test:backend-connection
 bun run test:ai-bridge
+bun run test:semantic-search
 ```
 
 What these scripts verify:
@@ -174,6 +194,7 @@ What these scripts verify:
 - `test:ai-bridge`: frontend can call backend `/api/ai/chat` and receive either:
   - `200` when NVIDIA key/provider is ready
   - `503` when `NVIDIA_API_KEY` is not configured yet
+- `test:semantic-search`: frontend can upsert and search vectors via backend pgvector endpoints
 
 ## API Endpoints (Current)
 
@@ -186,12 +207,28 @@ What these scripts verify:
 - `POST /api/ai/chat`
 - `POST /api/ai/image`
 
+### Semantic Search (pgvector)
+- `POST /api/ai/semantic-documents`
+- `POST /api/ai/semantic-search`
+
 Example:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/ai/chat \
   -H "Content-Type: application/json" \
   -d '{"prompt":"Say hello from Fehem","max_tokens":64}'
+```
+
+Semantic example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/ai/semantic-documents \
+  -H "Content-Type: application/json" \
+  -d '{"id":"chunk-1","content":"Fehem helps with AI learning","embedding":[0.11,0.22,0.33],"metadata":{"topic":"intro"}}'
+
+curl -X POST http://127.0.0.1:8000/api/ai/semantic-search \
+  -H "Content-Type: application/json" \
+  -d '{"query_embedding":[0.11,0.22,0.33],"top_k":3}'
 ```
 
 ## Repository Structure

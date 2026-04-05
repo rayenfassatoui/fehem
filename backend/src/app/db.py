@@ -22,6 +22,18 @@ async def connect_database() -> None:
         startup_error = f"{type(exc).__name__}: {exc}"
 
 
+async def get_database_pool() -> asyncpg.Pool:
+    global pool
+
+    if pool is None:
+        await connect_database()
+
+    if pool is None:
+        raise RuntimeError(startup_error or "Database pool is not initialized.")
+
+    return pool
+
+
 async def disconnect_database() -> None:
     global pool
 
@@ -31,20 +43,17 @@ async def disconnect_database() -> None:
 
 
 async def ping_database() -> tuple[bool, str]:
-    global pool
-
-    if pool is None:
-        await connect_database()
-
-    if pool is None:
-        return False, startup_error or "Database pool is not initialized."
+    try:
+        database_pool = await get_database_pool()
+    except RuntimeError as exc:
+        return False, str(exc)
 
     try:
-        async with pool.acquire() as connection:
+        async with database_pool.acquire() as connection:
             probe = await connection.fetchval("SELECT 1;")
 
         if probe == 1:
-            return True, "Neon PostgreSQL reachable."
+            return True, "PostgreSQL reachable."
 
         return False, "Unexpected database probe result."
     except Exception as exc:  # pragma: no cover
